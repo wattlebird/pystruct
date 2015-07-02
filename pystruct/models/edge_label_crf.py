@@ -61,6 +61,7 @@ class EdgeLabelCRF(object):
             for j in xrange(self.nNodeLabel):
                 for k in xrange(self.nNodeLabel):
                     if j!=k: inter_potentials[i,j,k,1]=-np.inf
+
         return inter_potentials
 
     def _check_size_w(self, w):
@@ -228,7 +229,6 @@ class EdgeLabelCRF(object):
         elif self.nInteractFeature != nInteractFeature:
             raise ValueError("Expected %d edge features, got %d"
                              % (self.nInteractFeature, nInteractFeature))
-
         self._set_size_joint_feature()
 
 class ExEdgeLabelCRF(EdgeLabelCRF):
@@ -269,3 +269,4 @@ class DirEdgeLabelCRF(EdgeLabelCRF):
                     if j!=k: inter_potentials[i,j,k,1]=-np.inf
                     if j==k: inter_potentials[i,j,k,2:4]=-np.inf
         return inter_potentials
+
