@@ -109,7 +109,8 @@ class CRF(StructuredModel):
                                   self.inference_method, relaxed=relaxed,
                                   return_energy=return_energy)
 
-    def inference(self, x, w, relaxed=False, return_energy=False):
+    def inference(self, x, w, relaxed=False, return_energy=False,
+    return_margin=False):
         """Inference for x using parameters w.
 
         Finds (approximately)

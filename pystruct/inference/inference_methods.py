@@ -206,6 +206,9 @@ def inference_ogm(unary_potentials, pairwise_potentials, edges,
         inference = opengm.inference.Mqpbo(gm)
     elif alg == 'alphaexp':
         inference = opengm.inference.AlphaExpansion(gm)
+    elif alg == 'lp':
+        parameter = opengm.InfParam(integerConstraint=True)
+        inference = opengm.inference.LpCplex(gm, parameter=parameter)
     if init is not None:
         inference.setStartingPoint(init)
 

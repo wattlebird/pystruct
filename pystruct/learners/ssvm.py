@@ -42,6 +42,20 @@ class BaseSSVM(BaseEstimator):
                 return self.model.batch_inference(X, self.w)
             return [self.model.inference(x, self.w) for x in X]
 
+    def marginal(self, X):
+        """Don't abuse this functionallity."""
+        verbose = max(0, self.verbose - 3)
+        if self.n_jobs != 1:
+            prediction = Parallel(n_jobs=self.n_jobs, verbose=verbose)(
+                delayed(inference)(self.model, x, self.w, return_margin=True)
+                for x in X)
+            return prediction
+        else:
+            if hasattr(self.model, 'batch_inference'):
+                return self.model.batch_inference(X, self.w, return_margin=True)
+            return [self.model.inference(x, self.w, return_margin=True)
+            for x in X]
+
     def score(self, X, Y):
         """Compute score as 1 - loss over whole data set.
 

@@ -9,12 +9,13 @@ from .latent_node_crf import LatentNodeCRF, EdgeFeatureLatentNodeCRF
 from .unstructured_svm import BinaryClf, MultiClassClf
 from .multilabel_svm import MultiLabelClf
 from .edge_feature_graph_crf import EdgeFeatureGraphCRF
-from .edge_label_crf import EdgeLabelCRF, ExEdgeLabelCRF, DirEdgeLabelCRF
+from .edge_label_crf import SimpleEdgeLabelCRF, EdgeLabelCRF,\
+ExEdgeLabelCRF, DirEdgeLabelCRF
 
 
 __all__ = ["StructuredModel", "CRF", "GridCRF", "GraphCRF",
            "DirectionalGridCRF", "BinaryClf", "LatentGridCRF",
            "LatentDirectionalGridCRF", "MultiClassClf", "LatentGraphCRF",
            "MultiLabelClf", "ChainCRF", "LatentNodeCRF", "EdgeFeatureGraphCRF",
-           "EdgeFeatureLatentNodeCRF", "EdgeLabelCRF", "ExEdgeLabelCRF", "DirEdgeLabelCRF"]
-
+           "EdgeFeatureLatentNodeCRF", "EdgeLabelCRF", "ExEdgeLabelCRF",
+           "DirEdgeLabelCRF", "SimpleEdgeLabelCRF"]
