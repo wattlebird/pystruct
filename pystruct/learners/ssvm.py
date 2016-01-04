@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.externals.joblib import Parallel, delayed
 from sklearn.base import BaseEstimator
 
-from ..utils import inference, objective_primal
+from ..utils import inference, objective_primal, marginal
 
 
 class BaseSSVM(BaseEstimator):
@@ -47,7 +47,7 @@ class BaseSSVM(BaseEstimator):
         verbose = max(0, self.verbose - 3)
         if self.n_jobs != 1:
             prediction = Parallel(n_jobs=self.n_jobs, verbose=verbose)(
-                delayed(inference)(self.model, x, self.w, return_margin=True)
+                delayed(marginal)(self.model, x, self.w)
                 for x in X)
             return prediction
         else:

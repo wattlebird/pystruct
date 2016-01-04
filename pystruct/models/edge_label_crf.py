@@ -6,7 +6,8 @@ from .utils import loss_augment_unaries
 class SimpleEdgeLabelCRF(object):
     def __init__(self, nNodeLabel, nEdgeLabel,
                  nNodeFeature=None, nEdgeFeature=None,
-                 inference_method=None, class_weight=None):
+                 inference_method=None, node_class_weight=None,
+                 edge_class_weight=None):
         self.nNodeLabel=nNodeLabel
         self.nEdgeLabel=nEdgeLabel
         self.nNodeFeature=nNodeFeature
@@ -16,7 +17,16 @@ class SimpleEdgeLabelCRF(object):
         else:
             self.inference_method=inference_method
 
-        self.class_weight=class_weight
+        if node_class_weight is None:
+            self.node_class_weight = np.ones(nNodeLabel)
+        else:
+            self.node_class_weight = np.asarray(node_class_weight, dtype=np.float)
+
+        if edge_class_weight is None:
+            self.edge_class_weight = np.ones(nEdgeLabel)
+        else:
+            self.edge_class_weight = np.asarray(edge_class_weight, dtype=np.float)
+
         self.inference_calls=0
 
     def __repr__(self):
@@ -63,7 +73,7 @@ class SimpleEdgeLabelCRF(object):
 
     def _check_size_w(self, w):
         if w.shape[0]!=self.nNodeLabel*self.nNodeFeature+self.nEdgeLabel*\
-        self.nEdgeFeature+self.nEdgeFeature*self.nNodeFeature*self.nNodeFeature:
+        self.nEdgeFeature+self.nEdgeLabel*self.nNodeLabel*self.nNodeLabel:
             raise ValueError("Number of w mismatch model.")
 
     def _set_size_joint_feature(self):
@@ -139,9 +149,10 @@ class SimpleEdgeLabelCRF(object):
 
         inference.infer()
         res = inference.arg().astype(np.int)
-        node_marginals = inference.marginals(np.arange(nNodes,
-        dtype=opengm.index_type))
+
         if return_margin:
+            node_marginals = inference.marginals(np.arange(nNodes,
+            dtype=opengm.index_type))
             return node_marginals
         if return_energy:
             return res, gm.evaluate(res)
@@ -181,8 +192,8 @@ class SimpleEdgeLabelCRF(object):
         edge_potentials = self._get_edge_potentials(x, w)
         inter_potentials = self._get_inter_potentials(x, w)
         edges = x[2]
-        loss_augment_unaries(node_potentials, np.asarray(y[:node_potentials.shape[0]]), np.ones(self.nNodeLabel))
-        loss_augment_unaries(edge_potentials, np.asarray(y[node_potentials.shape[0]:]), np.ones(self.nEdgeLabel))
+        loss_augment_unaries(node_potentials, np.asarray(y[:node_potentials.shape[0]]), self.node_class_weight)
+        loss_augment_unaries(edge_potentials, np.asarray(y[node_potentials.shape[0]:]), self.edge_class_weight)
 
         return self._inference(node_potentials, edge_potentials, inter_potentials, edges, self.inference_method[1]['alg'], \
             return_energy=return_energy, relaxed=relaxed)
@@ -211,7 +222,8 @@ class SimpleEdgeLabelCRF(object):
 class EdgeLabelCRF(object):
     def __init__(self, nNodeLabel, nEdgeLabel=2,
                  nNodeFeature=None, nEdgeFeature=None, nInteractFeature=None,
-                 inference_method=None, class_weight=None):
+                 inference_method=None, node_class_weight=None,
+                 edge_class_weight=None):
         self.nNodeLabel=nNodeLabel
         self.nEdgeLabel=nEdgeLabel
         self.nNodeFeature=nNodeFeature
@@ -222,7 +234,16 @@ class EdgeLabelCRF(object):
         else:
             self.inference_method=inference_method
 
-        self.class_weight=class_weight
+        if node_class_weight is None:
+            self.node_class_weight = np.ones(nNodeLabel)
+        else:
+            self.node_class_weight = np.asarray(node_class_weight, dtype=np.float)
+
+        if edge_class_weight is None:
+            self.edge_class_weight = np.ones(nEdgeLabel)
+        else:
+            self.edge_class_weight = np.asarray(edge_class_weight, dtype=np.float)
+
         self.inference_calls=0
 
     def __repr__(self):
@@ -271,7 +292,7 @@ class EdgeLabelCRF(object):
 
     def _check_size_w(self, w):
         if w.shape[0]!=self.nNodeLabel*self.nNodeFeature+self.nEdgeLabel*self.nEdgeFeature+\
-        self.nInteractFeature*self.nEdgeFeature*self.nNodeFeature*self.nNodeFeature:
+        self.nInteractFeature*self.nEdgeLabel*self.nNodeLabel*self.nNodeLabel:
             raise ValueError("Number of w mismatch model.")
 
     def _set_size_joint_feature(self):
@@ -280,7 +301,8 @@ class EdgeLabelCRF(object):
             self.nInteractFeature*self.nEdgeLabel*self.nNodeLabel*self.nNodeLabel
 
 
-    def inference(self, x, w, relaxed=True, return_energy=False):
+    def inference(self, x, w, relaxed=True, return_energy=False,
+    return_margin=False):
         self._check_size_w(w)
         self.inference_calls += 1
         node_potentials = self._get_node_potentials(x, w)
@@ -289,14 +311,15 @@ class EdgeLabelCRF(object):
         edges = x[3]
 
         return self._inference(node_potentials, edge_potentials, inter_potentials, edges, self.inference_method[1]['alg'], \
-            return_energy=return_energy)
+            return_energy=return_energy, return_margin=return_margin)
 
     def batch_inference(self, X, w, relaxed=None):
         return [self.inference(x, w, relaxed=relaxed)
                 for x in X]
 
     def _inference(self, node_potentials, edge_potentials, inter_potentials,
-                  edges, alg, return_energy=False, init=None, **kwargs):
+                  edges, alg, return_energy=False, return_margin=False,
+                  init=None, **kwargs):
         if node_potentials.shape[1]!=self.nNodeLabel:
             raise ValueError("Node feature function parameters should match node label numbers.")
         if edge_potentials.shape[0]!=edges.shape[0]:
@@ -367,6 +390,12 @@ class EdgeLabelCRF(object):
 
         inference.infer()
         res = inference.arg().astype(np.int)
+        if return_margin:
+            node_marginals = inference.marginals(np.arange(nNodes,
+            dtype=opengm.index_type))
+            edge_marginals = inference.marginals(np.arange(nNodes,
+            nNodes+nEdges, dtype=opengm.index_type))
+            return (node_marginals, edge_marginals)
         if return_energy:
             return res, gm.evaluate(res)
         return res
@@ -406,8 +435,8 @@ class EdgeLabelCRF(object):
         edge_potentials = self._get_edge_potentials(x, w)
         inter_potentials = self._get_inter_potentials(x, w)
         edges = x[3]
-        loss_augment_unaries(node_potentials, np.asarray(y[:node_potentials.shape[0]]), np.ones(self.nNodeLabel))
-        loss_augment_unaries(edge_potentials, np.asarray(y[node_potentials.shape[0]:]), np.ones(self.nEdgeLabel))
+        loss_augment_unaries(node_potentials, np.asarray(y[:node_potentials.shape[0]]), self.node_class_weight)
+        loss_augment_unaries(edge_potentials, np.asarray(y[node_potentials.shape[0]:]), self.edge_class_weight)
 
         return self._inference(node_potentials, edge_potentials, inter_potentials, edges, self.inference_method[1]['alg'], \
             return_energy=return_energy, relaxed=relaxed)
