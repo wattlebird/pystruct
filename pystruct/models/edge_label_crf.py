@@ -6,8 +6,8 @@ from .utils import loss_augment_unaries
 class SimpleEdgeLabelCRF(object):
     def __init__(self, nNodeLabel, nEdgeLabel,
                  nNodeFeature=None, nEdgeFeature=None,
-                 inference_method=None, node_class_weight=None,
-                 edge_class_weight=None):
+                 inference_method=None, node_class_weight=None
+                 ):
         self.nNodeLabel=nNodeLabel
         self.nEdgeLabel=nEdgeLabel
         self.nNodeFeature=nNodeFeature
@@ -21,11 +21,6 @@ class SimpleEdgeLabelCRF(object):
             self.node_class_weight = np.ones(nNodeLabel)
         else:
             self.node_class_weight = np.asarray(node_class_weight, dtype=np.float)
-
-        if edge_class_weight is None:
-            self.edge_class_weight = np.ones(nEdgeLabel)
-        else:
-            self.edge_class_weight = np.asarray(edge_class_weight, dtype=np.float)
 
         self.inference_calls=0
 
@@ -59,7 +54,7 @@ class SimpleEdgeLabelCRF(object):
     def _get_inter_potentials(self, x, w):
         """Here we concern about the inter_feature, which is nEdges
         """
-        param = w[self.nNodeFeature*self.nNodeLabel+self.nEdgeLabel*self.nEdgeFeature:]
+        param = w[self.nNodeFeature*self.nNodeLabel:]
         inter_potentials = param.reshape(self.nNodeLabel, self.nNodeLabel, self.nEdgeLabel)
         #for i in xrange(self.nNodeLabel):
         #    for j in xrange(self.nNodeLabel):
@@ -72,14 +67,13 @@ class SimpleEdgeLabelCRF(object):
         return inter_potentials
 
     def _check_size_w(self, w):
-        if w.shape[0]!=self.nNodeLabel*self.nNodeFeature+self.nEdgeLabel*\
-        self.nEdgeFeature+self.nEdgeLabel*self.nNodeLabel*self.nNodeLabel:
+        if w.shape[0]!=self.nNodeLabel*self.nNodeFeature+\
+        self.nEdgeLabel*self.nNodeLabel*self.nNodeLabel:
             raise ValueError("Number of w mismatch model.")
 
     def _set_size_joint_feature(self):
         if self.nNodeFeature is not None and self.nEdgeFeature is not None:
             self.size_joint_feature = self.nNodeLabel*self.nNodeFeature + \
-            self.nEdgeLabel*self.nEdgeFeature + \
             self.nEdgeLabel*self.nNodeLabel*self.nNodeLabel
 
 
@@ -88,11 +82,10 @@ class SimpleEdgeLabelCRF(object):
         self._check_size_w(w)
         self.inference_calls += 1
         node_potentials = self._get_node_potentials(x, w)
-        edge_potentials = self._get_edge_potentials(x, w)
         inter_potentials = self._get_inter_potentials(x, w)
         edges = x[2]
 
-        return self._inference(node_potentials, edge_potentials, inter_potentials, edges, self.inference_method[1]['alg'], \
+        return self._inference(node_potentials, inter_potentials, edges, self.inference_method[1]['alg'], \
             return_energy=return_energy, return_margin=return_margin)
 
     def batch_inference(self, X, w, relaxed=None, return_energy=False,
@@ -101,15 +94,11 @@ class SimpleEdgeLabelCRF(object):
         return_energy=return_energy, return_margin=return_margin)
                 for x in X]
 
-    def _inference(self, node_potentials, edge_potentials, inter_potentials,
+    def _inference(self, node_potentials, inter_potentials,
                   edges, alg, return_energy=False, return_margin=False,
                   init=None, **kwargs):
         if node_potentials.shape[1]!=self.nNodeLabel:
             raise ValueError("Node feature function parameters should match node label numbers.")
-        if edge_potentials.shape[0]!=edges.shape[0]:
-            raise ValueError("Edge feature function numbers should match given edges.")
-        if edge_potentials.shape[1]!=self.nEdgeLabel:
-            raise ValueError("Edge feature function parameters should match edge label numbers.")
         if inter_potentials.shape[0]!=self.nNodeLabel or inter_potentials.shape[1]!=self.nNodeLabel \
         or inter_potentials.shape[2]!=self.nEdgeLabel:
             raise ValueError("Interaction potential function parameters should match combination number of labels.")
@@ -125,11 +114,6 @@ class SimpleEdgeLabelCRF(object):
         unaries = -np.require(node_potentials, dtype=opengm.value_type)
         fidUnaries = gm.addFunctions(unaries)
         visUnaries = np.arange(nNodes, dtype=np.uint64)
-        gm.addFactors(fidUnaries, visUnaries)
-
-        unaries = -np.require(edge_potentials, dtype=opengm.value_type)
-        fidUnaries = gm.addFunctions(unaries)
-        visUnaries = np.arange(nNodes, nEdges+nNodes, dtype=np.uint64)
         gm.addFactors(fidUnaries, visUnaries)
 
         inter_potentials=np.repeat(inter_potentials[np.newaxis, :, :, :],
@@ -169,10 +153,6 @@ class SimpleEdgeLabelCRF(object):
         node_marginals[node_label, np.arange(node_feature.shape[0])]=1
         node_acc = np.dot(node_marginals, node_feature).T
 
-        edge_marginals = np.zeros((self.nEdgeLabel, edge_feature.shape[0]), dtype=np.int)
-        edge_marginals[edge_label, np.arange(edge_feature.shape[0])]=1
-        edge_acc = np.dot(edge_marginals, edge_feature).T
-
         inter_marginals = np.zeros((edges.shape[0],
         self.nEdgeLabel*self.nNodeLabel*self.nNodeLabel), dtype=np.int)
         t=edge_label + (node_label[edges[:,1]] + node_label[edges[:,0]]*\
@@ -180,7 +160,7 @@ class SimpleEdgeLabelCRF(object):
         inter_marginals[np.arange(edges.shape[0]), t]=1
         inter_acc = inter_marginals.sum(axis=0)
 
-        return np.hstack([node_acc.ravel(), edge_acc.ravel(), inter_acc.ravel()])
+        return np.hstack([node_acc.ravel(), inter_acc.ravel()])
 
     def loss(self, y, y_hat):
         return np.sum(y != y_hat)
@@ -189,13 +169,11 @@ class SimpleEdgeLabelCRF(object):
         self.inference_calls += 1
         self._check_size_w(w)
         node_potentials = self._get_node_potentials(x, w)
-        edge_potentials = self._get_edge_potentials(x, w)
         inter_potentials = self._get_inter_potentials(x, w)
         edges = x[2]
         loss_augment_unaries(node_potentials, np.asarray(y[:node_potentials.shape[0]]), self.node_class_weight)
-        loss_augment_unaries(edge_potentials, np.asarray(y[node_potentials.shape[0]:]), self.edge_class_weight)
 
-        return self._inference(node_potentials, edge_potentials, inter_potentials, edges, self.inference_method[1]['alg'], \
+        return self._inference(node_potentials, inter_potentials, edges, self.inference_method[1]['alg'], \
             return_energy=return_energy, relaxed=relaxed)
 
     def batch_loss_augmented_inference(self, X, Y, w, relaxed=None):
@@ -282,11 +260,11 @@ class EdgeLabelCRF(object):
         param = w[self.nNodeFeature*self.nNodeLabel+self.nEdgeLabel*self.nEdgeFeature:].reshape(self.nInteractFeature,-1)
         inter_potentials = np.dot(inter_feature, param).reshape(inter_feature.shape[0], \
             self.nNodeLabel, self.nNodeLabel, self.nEdgeLabel)
-        for i in xrange(inter_feature.shape[0]):#This may introduce some incompatiblity because we assume the nEdgeFeature is 2.
+        #for i in xrange(inter_feature.shape[0]):#This may introduce some incompatiblity because we assume the nEdgeFeature is 2.
             #inter_potentials[i,:,:,1]*=np.diag(np.ones(self.nNodeLabel))
-            for j in xrange(self.nNodeLabel):
-                for k in xrange(self.nNodeLabel):
-                    if j!=k: inter_potentials[i,j,k,1]=-np.inf
+            #for j in xrange(self.nNodeLabel):
+            #    for k in xrange(self.nNodeLabel):
+            #        if j!=k: inter_potentials[i,j,k,1]=-np.inf
 
         return inter_potentials
 
