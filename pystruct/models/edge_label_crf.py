@@ -94,6 +94,10 @@ class SimpleEdgeLabelCRF(object):
         return_energy=return_energy, return_margin=return_margin)
                 for x in X]
 
+    def batch_loss(self, Y, Y_hat):
+        # default implementation of batch loss
+        return [self.loss(y, y_hat) for y, y_hat in zip(Y, Y_hat)]
+
     def _inference(self, node_potentials, inter_potentials,
                   edges, alg, return_energy=False, return_margin=False,
                   init=None, **kwargs):
@@ -161,6 +165,16 @@ class SimpleEdgeLabelCRF(object):
         inter_acc = inter_marginals.sum(axis=0)
 
         return np.hstack([node_acc.ravel(), inter_acc.ravel()])
+
+    def batch_joint_feature(self, X, Y, Y_true=None):
+        joint_feature_ = np.zeros(self.size_joint_feature)
+        if getattr(self, 'rescale_C', False):
+            for x, y, y_true in zip(X, Y, Y_true):
+                joint_feature_ += self.joint_feature(x, y, y_true)
+        else:
+            for x, y in zip(X, Y):
+                joint_feature_ += self.joint_feature(x, y)
+        return joint_feature_
 
     def loss(self, y, y_hat):
         return np.sum(y != y_hat)
@@ -403,8 +417,22 @@ class EdgeLabelCRF(object):
 
         return np.hstack([node_acc.ravel(), edge_acc.ravel(), inter_acc.ravel()])
 
+    def batch_joint_feature(self, X, Y, Y_true=None):
+        joint_feature_ = np.zeros(self.size_joint_feature)
+        if getattr(self, 'rescale_C', False):
+            for x, y, y_true in zip(X, Y, Y_true):
+                joint_feature_ += self.joint_feature(x, y, y_true)
+        else:
+            for x, y in zip(X, Y):
+                joint_feature_ += self.joint_feature(x, y)
+        return joint_feature_
+
     def loss(self, y, y_hat):
         return np.sum(y != y_hat)
+
+    def batch_loss(self, Y, Y_hat):
+        # default implementation of batch loss
+        return [self.loss(y, y_hat) for y, y_hat in zip(Y, Y_hat)]
 
     def loss_augmented_inference(self, x, y, w, relaxed=False, return_energy=False):
         self.inference_calls += 1
@@ -461,10 +489,6 @@ class ExEdgeLabelCRF(EdgeLabelCRF):
             for j in xrange(self.nNodeLabel):
                 for k in xrange(self.nNodeLabel):
                     if j!=k: inter_potentials[i,j,k,1]=-np.inf
-                    if i<1 or j!=0: inter_potentials[i,j,k,2]=-np.inf
-                    if i!=0 or j<1: inter_potentials[i,j,k,3]=-np.inf
-                    if i!=1 or j<2: inter_potentials[i,j,k,4]=-np.inf;inter_potentials[i,j,k,6]=-np.inf;
-                    if i<2 or j!=1: inter_potentials[i,j,k,5]=-np.inf;inter_potentials[i,j,k,7]=-np.inf;
         return inter_potentials
 
 class DirEdgeLabelCRF(EdgeLabelCRF):
@@ -482,5 +506,22 @@ class DirEdgeLabelCRF(EdgeLabelCRF):
             for j in xrange(self.nNodeLabel):
                 for k in xrange(self.nNodeLabel):
                     if j!=k: inter_potentials[i,j,k,1]=-np.inf
-                    if j==k: inter_potentials[i,j,k,2:4]=-np.inf
+                    if j==k: inter_potentials[i,j,k,2:]=-np.inf
+        return inter_potentials
+
+class GraphEdgeLabelCRF(EdgeLabelCRF):
+    def _get_inter_potentials(self, x, w):
+        """Here we concern about the inter_feature, which is nEdges x nInteractFeature
+        """
+        inter_feature=x[2]
+        if inter_feature.shape[1]!=self.nInteractFeature:
+            raise ValueError("Number of interact features not match the model.")
+        param = w[self.nNodeFeature*self.nNodeLabel+self.nEdgeLabel*self.nEdgeFeature:].reshape(self.nInteractFeature,-1)
+        inter_potentials = np.dot(inter_feature, param).reshape(inter_feature.shape[0], \
+            self.nNodeLabel, self.nNodeLabel, self.nEdgeLabel)
+        for i in xrange(inter_feature.shape[0]):#This may introduce some incompatiblity because we assume the nEdgeFeature is 8.
+            #inter_potentials[i,:,:,1]*=np.diag(np.ones(self.nNodeLabel))
+            for j in xrange(self.nNodeLabel):
+                for k in xrange(self.nNodeLabel):
+                    if j==k: inter_potentials[i,j,k,1:]=-np.inf
         return inter_potentials
